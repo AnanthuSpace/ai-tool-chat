@@ -1,8 +1,7 @@
 "use client";
 
-import type React from "react";
-
 import { useState } from "react";
+import { supabase } from "@/lib/supabase/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,43 +15,59 @@ import {
 } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+interface SigninFormData {
+  email: string;
+  password: string;
+}
 
 export default function SigninForm() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SigninFormData>({
     email: "",
     password: "",
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); 
     setIsLoading(true);
 
-    // Add your signin logic here
-    console.log("Signin attempt:", formData);
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    console.log("Login response:", data, error);
+
+    if (error) {
+      toast.error(error.message);
+    } else if (data.session) {
+      toast.success("Login successful!");
+      router.replace("/"); 
+    }
+
+    setIsLoading(false);
   };
 
-  const handleGoogleLogin = async () => {
-    console.log("Google login clicked");
-    // Add your Google OAuth logic here
-  };
+  const handleOAuthLogin = async (provider: "google" | "github") => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/` },
+    });
 
-  const handleGitHubLogin = async () => {
-    console.log("GitHub login clicked");
-    // Add your GitHub OAuth logic here
+    if (error) alert(error.message);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   return (
@@ -65,6 +80,7 @@ export default function SigninForm() {
           Enter your email and password to access your account
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -80,6 +96,7 @@ export default function SigninForm() {
               disabled={isLoading}
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <div className="relative">
@@ -109,6 +126,7 @@ export default function SigninForm() {
               </Button>
             </div>
           </div>
+
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? "Signing in..." : "Sign In"}
           </Button>
@@ -125,12 +143,12 @@ export default function SigninForm() {
           </div>
         </div>
 
-        <div className="flex flex-row justify-between w-full max-w-sm mx-auto gap-4">
+        <div className="flex gap-4 justify-center">
           <Button
             type="button"
             variant="outline"
             className="flex-1 flex items-center justify-center gap-2"
-            onClick={handleGoogleLogin}
+            onClick={() => handleOAuthLogin("google")}
             disabled={isLoading}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -158,7 +176,7 @@ export default function SigninForm() {
             type="button"
             variant="outline"
             className="flex-1 flex items-center justify-center gap-2"
-            onClick={handleGitHubLogin}
+            onClick={() => handleOAuthLogin("github")}
             disabled={isLoading}
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -168,11 +186,12 @@ export default function SigninForm() {
           </Button>
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col space-y-2">
+
+      <CardFooter className="flex flex-col space-y-2 text-center">
         <Button variant="link" className="text-sm">
           Forgot your password?
         </Button>
-        <div className="text-sm text-muted-foreground text-center">
+        <div className="text-sm text-muted-foreground">
           {"Don't have an account? "}
           <Button variant="link" className="p-0 h-auto font-normal">
             <Link href="/signup">Sign up</Link>

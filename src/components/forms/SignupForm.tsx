@@ -1,8 +1,7 @@
 "use client";
 
-import type React from "react";
-
 import { useState } from "react";
+import { supabase } from "@/lib/supabase/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +16,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export default function SignupForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,8 +24,6 @@ export default function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -35,34 +33,42 @@ export default function SignupForm() {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords don't match!");
+      toast.error("Passwords don't match!");
       return;
     }
 
     if (!acceptTerms) {
-      alert("Please accept the terms and conditions");
+      toast.error("Please accept the terms and conditions");
       return;
     }
 
     setIsLoading(true);
 
-    // Add your signup logic here
-    console.log("Signup attempt:", formData);
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+    });
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+    setIsLoading(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Signup successful! Check your email for confirmation.");
+      console.log(data);
+    }
   };
 
   const handleGoogleLogin = async () => {
-    console.log("Google signup clicked");
-    // Add your Google OAuth logic here
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+    });
   };
 
   const handleGitHubLogin = async () => {
-    console.log("GitHub signup clicked");
-    // Add your GitHub OAuth logic here
+    await supabase.auth.signInWithOAuth({
+      provider: "github",
+    });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

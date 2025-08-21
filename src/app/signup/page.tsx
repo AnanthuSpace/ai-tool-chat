@@ -1,17 +1,14 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import AuthSkeleton from "@/components/forms/AuthSkeleton";
+import SignupForm from "@/components/forms/SignupForm";
+import { withoutAuth } from "@/lib/withoutAuth";
 
-const SignupForm = dynamic(() => import("@/components/forms/SignupForm"), {
-  ssr: false,
-  loading: () => <AuthSkeleton />,
-});
-
-export default function SignupPage() {
+function SignupPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <SignupForm />
     </div>
   );
 }
+
+export default withoutAuth(SignupPage);
