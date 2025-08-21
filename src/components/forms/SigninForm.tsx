@@ -51,7 +51,7 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       toast.error(error.message);
     } else if (data.session) {
       toast.success("Login successful!");
-      router.replace("/"); 
+      router.push("/dashboard"); 
     }
 
     setIsLoading(false);

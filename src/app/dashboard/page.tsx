@@ -9,7 +9,6 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Send, MessageSquare, LogOut } from "lucide-react";
 
-// ---- Types ----
 type Role = "user" | "assistant";
 
 interface DBMessage {
@@ -32,7 +31,6 @@ interface Chat extends DBChat {
   messages: DBMessage[];
 }
 
-// ---- Dashboard ----
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<any>(null);
@@ -48,7 +46,6 @@ export default function DashboardPage() {
     [chats, activeChatId]
   );
 
-  // ---- Auth + Initial Load ----
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -61,7 +58,6 @@ export default function DashboardPage() {
     })();
   }, [router]);
 
-  // ---- Load Chats + Messages ----
   useEffect(() => {
     if (!session?.user?.id) return;
 
@@ -100,12 +96,10 @@ export default function DashboardPage() {
     load();
   }, [session?.user?.id]);
 
-  // ---- Auto-scroll ----
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeChat?.messages.length]);
 
-  // ---- Actions ----
   const createNewChat = async () => {
     if (!session?.user?.id) return;
     const { data } = await supabase
@@ -126,7 +120,6 @@ export default function DashboardPage() {
     setInput("");
     setSending(true);
 
-    // Optimistic message
     const tempId = `temp-${Date.now()}`;
     const optimistic: DBMessage = {
       id: tempId,
@@ -144,7 +137,6 @@ export default function DashboardPage() {
       )
     );
 
-    // Persist user message
     const { data } = await supabase
       .from("messages")
       .insert([
@@ -171,7 +163,6 @@ export default function DashboardPage() {
       );
     }
 
-    // ---- AI Response ----
     const aiResponse = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -216,7 +207,6 @@ export default function DashboardPage() {
   };
 
   const logout = async () => {
-    console.log("first");
     await supabase.auth.signOut();
     router.replace("/signin");
   };
@@ -228,26 +218,38 @@ export default function DashboardPage() {
       </div>
     );
 
-  // ---- Render ----
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
       <div className="w-80 border-r border-border bg-card flex flex-col justify-between">
-        {/* Top: Email + New Chat */}
-        <div className="p-4">
-          <h2 className="text-sm font-medium truncate">
+        <div className="p-4 flex-1 overflow-y-auto">
+          <h2 className="text-sm font-medium truncate mb-3">
             {session?.user?.email}
           </h2>
+
           <Button
             onClick={createNewChat}
-            className="w-full justify-start gap-2 bg-transparent mt-3"
+            className="w-full justify-start gap-2 bg-transparent mb-4"
             variant="outline"
           >
             <Plus className="h-4 w-4" /> New Chat
           </Button>
+
+          <div className="flex flex-col gap-2">
+            {chats.map((chat) => (
+              <Button
+                key={chat.id}
+                variant={chat.id === activeChatId ? "default" : "ghost"}
+                className="justify-start truncate"
+                onClick={() => setActiveChatId(chat.id)}
+              >
+                {chat.messages[0]?.content
+                  ? chat.messages[0].content.slice(0, 30) + "..."
+                  : chat.title}
+              </Button>
+            ))}
+          </div>
         </div>
 
-        {/* Bottom: Log Out */}
         <div className="p-4 border-t border-border">
           <Button
             className="w-full flex items-center justify-center gap-2 text-red-500"
@@ -258,7 +260,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Chat Area */}
       <div className="flex-1 flex flex-col">
         <div className="flex-1 p-6">
           <Card className="h-full shadow-none">
@@ -303,7 +304,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Input */}
         <div className="p-6 pt-0 flex gap-2">
           <Input
             value={input}
