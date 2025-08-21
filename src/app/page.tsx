@@ -1,12 +1,19 @@
 "use client";
 
 import { withAuth } from "@/lib/withAuth";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 function Dashboard({ session }: { session: any }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.push("/dashboard");
+  }, [router]);
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Welcome, {session?.user?.email}</h1>
-      <p>This is a protected dashboard page.</p>
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
   );
 }
