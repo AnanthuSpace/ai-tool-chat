@@ -1,176 +1,292 @@
-"use client"
+"use client";
 
-import type React from "react"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/supabaseClient";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, Send, MessageSquare, LogOut } from "lucide-react";
 
-import { withAuth } from "@/lib/withAuth"
-import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, Send, MessageSquare, Mic } from "lucide-react"
+// ---- Types ----
+type Role = "user" | "assistant";
 
-interface Message {
-  id: string
-  content: string
-  role: "user" | "assistant"
-  timestamp: Date
+interface DBMessage {
+  id: string;
+  chat_id: string;
+  user_id: string;
+  role: Role;
+  content: string;
+  created_at: string;
 }
 
-interface Chat {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: Date
+interface DBChat {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
 }
 
-function Dashboard({ session }: { session: any }) {
-  const [chats, setChats] = useState<Chat[]>([])
-  const [activeChat, setActiveChat] = useState<string | null>(null)
-  const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+interface Chat extends DBChat {
+  messages: DBMessage[];
+}
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+// ---- Dashboard ----
+export default function DashboardPage() {
+  const router = useRouter();
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const activeChat = useMemo(
+    () => chats.find((c) => c.id === activeChatId) || null,
+    [chats, activeChatId]
+  );
+
+  // ---- Auth + Initial Load ----
   useEffect(() => {
-    scrollToBottom()
-  }, [chats, activeChat])
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        router.push("/signin");
+        return;
+      }
+      setSession(data.session);
+      setLoading(false);
+    })();
+  }, [router]);
 
-  const createNewChat = () => {
-    const newChat: Chat = {
-      id: Date.now().toString(),
-      title: "New Chat",
-      messages: [],
-      createdAt: new Date(),
-    }
-    setChats((prev) => [newChat, ...prev])
-    setActiveChat(newChat.id)
-  }
+  // ---- Load Chats + Messages ----
+  useEffect(() => {
+    if (!session?.user?.id) return;
 
-  const sendMessage = async () => {
-    if (!input.trim() || !activeChat) return
+    const load = async () => {
+      const { data: chatRows } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: input.trim(),
-      role: "user",
-      timestamp: new Date(),
-    }
+      const chatIds = (chatRows ?? []).map((c) => c.id);
+      const messagesByChat: Record<string, DBMessage[]> = {};
 
-    // Update chat with user message
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === activeChat
-          ? {
-              ...chat,
-              messages: [...chat.messages, userMessage],
-              title: chat.messages.length === 0 ? input.trim().slice(0, 30) + "..." : chat.title,
-            }
-          : chat,
-      ),
-    )
+      if (chatIds.length > 0) {
+        const { data: messageRows } = await supabase
+          .from("messages")
+          .select("*")
+          .in("chat_id", chatIds)
+          .order("created_at", { ascending: true });
 
-    setInput("")
-    setIsLoading(true)
-
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: `I understand you said: "${userMessage.content}". This is a simulated response. You can integrate with your preferred AI API here.`,
-        role: "assistant",
-        timestamp: new Date(),
+        for (const m of messageRows ?? []) {
+          if (!messagesByChat[m.chat_id]) messagesByChat[m.chat_id] = [];
+          messagesByChat[m.chat_id].push(m);
+        }
       }
 
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === activeChat ? { ...chat, messages: [...chat.messages, assistantMessage] } : chat,
-        ),
+      const merged: Chat[] = (chatRows ?? []).map((c) => ({
+        ...c,
+        messages: messagesByChat[c.id] ?? [],
+      }));
+      setChats(merged);
+
+      if (!activeChatId && merged.length > 0) setActiveChatId(merged[0].id);
+    };
+
+    load();
+  }, [session?.user?.id]);
+
+  // ---- Auto-scroll ----
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeChat?.messages.length]);
+
+  // ---- Actions ----
+  const createNewChat = async () => {
+    if (!session?.user?.id) return;
+    const { data } = await supabase
+      .from("chats")
+      .insert([{ user_id: session.user.id, title: "New Chat" }])
+      .select("*")
+      .single();
+
+    const chat: Chat = { ...data, messages: [] };
+    setChats((prev) => [chat, ...prev]);
+    setActiveChatId(chat.id);
+  };
+
+  const send = async () => {
+    if (!input.trim() || !activeChat || !session?.user?.id) return;
+
+    const content = input.trim();
+    setInput("");
+    setSending(true);
+
+    // Optimistic message
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: DBMessage = {
+      id: tempId,
+      chat_id: activeChat.id,
+      user_id: session.user.id,
+      role: "user",
+      content,
+      created_at: new Date().toISOString(),
+    };
+    setChats((prev) =>
+      prev.map((c) =>
+        c.id === activeChat.id
+          ? { ...c, messages: [...c.messages, optimistic] }
+          : c
       )
-      setIsLoading(false)
-    }, 1000)
-  }
+    );
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
+    // Persist user message
+    const { data } = await supabase
+      .from("messages")
+      .insert([
+        {
+          chat_id: activeChat.id,
+          user_id: session.user.id,
+          role: "user",
+          content,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (data) {
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChat.id
+            ? {
+                ...c,
+                messages: c.messages.map((m) => (m.id === tempId ? data : m)),
+              }
+            : c
+        )
+      );
     }
-  }
 
-  const currentChat = chats.find((chat) => chat.id === activeChat)
+    // ---- AI Response ----
+    const aiResponse = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: content }),
+    });
 
+    const aiData = await aiResponse.json();
+    if (!aiResponse.ok) throw new Error(aiData.error || "AI API failed");
+    const aiContent = aiData.text;
+
+    const { data: aiMessage } = await supabase
+      .from("messages")
+      .insert([
+        {
+          chat_id: activeChat.id,
+          user_id: session.user.id,
+          role: "assistant",
+          content: aiContent,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (aiMessage) {
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChat.id
+            ? { ...c, messages: [...c.messages, aiMessage] }
+            : c
+        )
+      );
+    }
+
+    setSending(false);
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  const logout = async () => {
+    console.log("first");
+    await supabase.auth.signOut();
+    router.replace("/signin");
+  };
+
+  if (loading)
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Loading...
+      </div>
+    );
+
+  // ---- Render ----
   return (
     <div className="flex h-screen bg-background">
-      <div className="w-80 border-r border-border bg-card">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Welcome, {session?.user?.email}</h2>
-          </div>
-          <Button onClick={createNewChat} className="w-full justify-start gap-2 bg-transparent" variant="outline">
-            <Plus className="h-4 w-4" />
-            New Chat
+      {/* Sidebar */}
+      <div className="w-80 border-r border-border bg-card flex flex-col justify-between">
+        {/* Top: Email + New Chat */}
+        <div className="p-4">
+          <h2 className="text-sm font-medium truncate">
+            {session?.user?.email}
+          </h2>
+          <Button
+            onClick={createNewChat}
+            className="w-full justify-start gap-2 bg-transparent mt-3"
+            variant="outline"
+          >
+            <Plus className="h-4 w-4" /> New Chat
           </Button>
         </div>
 
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-2">
-            {chats.map((chat) => (
-              <Card
-                key={chat.id}
-                className={`p-3 cursor-pointer transition-colors hover:bg-accent ${
-                  activeChat === chat.id ? "bg-accent" : ""
-                }`}
-                onClick={() => setActiveChat(chat.id)}
-              >
-                <div className="flex items-start gap-2">
-                  <MessageSquare className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{chat.title}</p>
-                    <p className="text-xs text-muted-foreground">{chat.createdAt.toLocaleDateString()}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </ScrollArea>
+        {/* Bottom: Log Out */}
+        <div className="p-4 border-t border-border">
+          <Button
+            className="w-full flex items-center justify-center gap-2 text-red-500"
+            onClick={logout}
+          >
+            <LogOut className="h-4 w-4" /> Log Out
+          </Button>
+        </div>
       </div>
 
+      {/* Chat Area */}
       <div className="flex-1 flex flex-col">
-
         <div className="flex-1 p-6">
           <Card className="h-full shadow-none">
-            {activeChat && currentChat ? (
+            {activeChat ? (
               <ScrollArea className="h-full p-4">
                 <div className="space-y-4">
-                  {currentChat.messages.map((message) => (
+                  {activeChat.messages.map((m) => (
                     <div
-                      key={message.id}
-                      className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                      key={m.id}
+                      className={`flex ${
+                        m.role === "user" ? "justify-end" : "justify-start"
+                      }`}
                     >
                       <div
                         className={`max-w-[80%] p-3 rounded-lg ${
-                          message.role === "user"
+                          m.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs opacity-70 mt-1">{message.timestamp.toLocaleTimeString()}</p>
+                        <p className="text-sm">{m.content}</p>
+                        <p className="text-[10px] opacity-70 mt-1">
+                          {new Date(m.created_at).toLocaleTimeString()}
+                        </p>
                       </div>
                     </div>
                   ))}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-muted text-muted-foreground p-3 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="animate-pulse">Thinking...</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {sending && <div className="animate-pulse">Thinking...</div>}
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
@@ -178,43 +294,38 @@ function Dashboard({ session }: { session: any }) {
               <div className="h-full flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">Start a new conversation</p>
-                  <p className="text-sm">Click "New Chat" to begin</p>
+                  <p className="text-lg font-medium">
+                    Start a new conversation
+                  </p>
                 </div>
               </div>
             )}
           </Card>
         </div>
 
-        {/* Input Field */}
-        <div className="p-6 pt-0">
-          <div className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={activeChat ? "Type your message..." : "Create a new chat to start messaging"}
-              disabled={!activeChat || isLoading}
-              className="flex-1"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={!activeChat || isLoading}
-              onClick={() => {
-                console.log("[v0] Voice recording clicked")
-              }}
-            >
-              <Mic className="h-4 w-4" />
-            </Button>
-            <Button onClick={sendMessage} disabled={!input.trim() || !activeChat || isLoading} size="icon">
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Input */}
+        <div className="p-6 pt-0 flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              activeChat
+                ? "Type your message..."
+                : "Create a new chat to start messaging"
+            }
+            className="flex-1"
+            disabled={!activeChat || sending}
+          />
+          <Button
+            onClick={send}
+            disabled={!input.trim() || !activeChat || sending}
+            size="icon"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>
-  )
+  );
 }
-
-export default withAuth(Dashboard)
