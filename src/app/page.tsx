@@ -4,7 +4,7 @@ import { withAuth } from "@/lib/withAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-function Dashboard({ session }: { session: any }) {
+function Dashboard() {
   const router = useRouter();
 
   useEffect(() => {

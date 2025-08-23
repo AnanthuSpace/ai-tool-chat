@@ -47,7 +47,7 @@ export async function createChat(title: string) {
   return data;
 }
 
-export async function saveMessage(chatId: string, role: "user"|"assistant"|"tool", content: any) {
+export async function saveMessage(chatId: string, role: "user"|"assistant"|"tool", content: string | Record<string, unknown>) {
   const user = await requireUser();
   if (!user) throw new Error("unauthorized");
   const supabase = supabaseServer();

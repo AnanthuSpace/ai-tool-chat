@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Send, MessageSquare, LogOut } from "lucide-react";
+import { Session } from "@supabase/supabase-js";
 
 type Role = "user" | "assistant";
 
@@ -33,7 +34,7 @@ interface Chat extends DBChat {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function DashboardPage() {
     };
 
     load();
-  }, [session?.user?.id]);
+  }, [session?.user?.id, activeChatId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

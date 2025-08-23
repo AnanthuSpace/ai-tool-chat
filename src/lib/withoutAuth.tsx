@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./supabase/supabaseClient";
 
-export function withoutAuth(Component: any) {
-  return function PublicOnlyPage(props: any) {
+export function withoutAuth<P extends object>(Component: ComponentType<P>) {
+  return function PublicOnlyPage(props: P) {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
 
